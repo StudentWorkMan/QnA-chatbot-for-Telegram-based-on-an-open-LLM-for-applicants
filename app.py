@@ -1,6 +1,4 @@
-
 import sys
-
 import logging
 
 logging.basicConfig(filename="logs_out.log",
