@@ -1,9 +1,12 @@
+
 import sys
+
 import logging
 
 logging.basicConfig(filename="logs_out.log",
                     format='%(asctime)s - %(levelname)s - %(message)s',
-                    filemode='a')
+                    filemode='a',
+                    encoding='utf-8')
 
 logger = logging.getLogger('model_logger')
 logger.setLevel(logging.INFO)
@@ -28,11 +31,24 @@ logger.setLevel(logging.INFO)
 # chunk_size (По умолчанию 2000)
 # chunk_overlap (По умолчанию 300)
 
+# [BOT]
+# token (Токен бота)
+
 # Парсер конфигурационных файлов.
 import configparser
 
 config = configparser.ConfigParser()
-config.read("settings.ini")
+
+with open('settings.ini', 'r', encoding='utf-8') as f:
+    config.read_file(f)
+
+#config.read("settings.ini")
+
+try:
+    token = config['BOT']['token']
+except:
+    logger.error('Нет токена бота в конфиге, не могу начать работу бота')
+    sys.exit('Нет токена бота в конфиге')
 
 # Чтение config файла. Модель
 try:
@@ -152,9 +168,12 @@ path_to_pdfs = pdf_path + '/'
 
 logger.info('Подгружаю файлы из директории %s', path_to_pdfs)
 
-loader = DirectoryLoader(path_to_pdfs, glob="**/*.pdf", loader_cls=PyPDFLoader)
-docs = loader.load()
-
+try:
+    loader = DirectoryLoader(path_to_pdfs, glob="**/*.pdf", loader_cls=PyPDFLoader)
+    docs = loader.load()
+except Exception as e:
+    logger.error("Проблема в загрузке файлов в директорию, сообщение ошибки: %s", repr(e))
+    sys.exit("Проблема в загрузке файлов (возможно директория не доступна) " + repr(e))
 logger.info('Закончил подгрузку файлов из директории %s', path_to_pdfs)
 
 # Убираем символы перехода на новую строку, для упрощения восприятия текста моделью.
@@ -189,7 +208,8 @@ logger.info('Начинаю подгружать модель embedding %s', emb
 try:
   embedding_model = SentenceTransformer(embedding_model_name)
 except Exception as e:
-  logger.error('Не получилось подгрузить модель embedding %s. Сообщение ошибки: %s', embedding_model_name, e.message)
+  logger.error('Не получилось подгрузить модель embedding %s. Сообщение ошибки: %s', embedding_model_name, repr(e) )
+  print(repr(e))
   sys.exit('Ошибка в подгрузке модели embeddeding')
 
 logger.info('Закончил подгружать модель embedding %s', embedding_model_name)
@@ -217,7 +237,8 @@ logging.info('Начинаю процесс эмбеддинга текстов'
 try:
   vectorstore = Chroma.from_documents(documents=all_splits, embedding=embeddings)
 except Exception as e:
-  logger.error('Не получилось применить эмбеддинг к текстам. Сообщение ошибки: %s', e.message)
+  logger.error('Не получилось применить эмбеддинг к текстам. Сообщение ошибки: %s', repr(e) )
+  print(repr(e))
   sys.exit('Ошибка в применении эмбеддинга')
 
 logging.info('Завершил процесс эмбеддинга текстов')
@@ -229,7 +250,8 @@ from langchain_core.runnables import RunnableLambda
 try:
   retriever = RunnableLambda(vectorstore.similarity_search).bind(k=rag_top_k)  # select top result
 except Exception as e:
-  logger.error('Не получилось создать retriever часть пайплайна %s', e.message)
+  logger.error('Не получилось создать retriever часть пайплайна %s', repr(e) )
+  print(repr(e))
   sys.exit('Ошибка в создании части пайплайна (retriever)')
 
 from langchain_community.llms import VLLM
@@ -264,7 +286,8 @@ try:
       gpu_memory_utilization=gpu_memory_utilization
     )
 except Exception as e:
-  logger.error('Не получилось подгрузить модель %s. Сообщение ошибки: %s', model, e.message)
+  logger.error('Не получилось подгрузить модель %s. Сообщение ошибки: %s', model, repr(e) )
+  print(repr(e))
   sys.exit('Ошибка в подгрузке модели')
 
 logger.info('Закончил загружать модель')
@@ -300,7 +323,7 @@ message = """
 "{context}"
 """
 
-llm.temperature = 0.35 # 0 - 1
+# llm.temperature = 0.35 # 0 - 1
 # llm.max_new_tokens = 512 #
 # llm.top_k=50 # 10 - 200
 # llm.top_p = 0.85 # 0 - 1
@@ -333,10 +356,6 @@ logger.info('Собрал pipeline')
 #res_df['answer'] = ans
 #res_df.to_csv('result_submission.csv', index=False)
 
-# Код который достаёт из секретов google colab токен бота.
-
-from google.colab import userdata
-token = userdata.get('BOT_TOKEN')
 
 import nest_asyncio
 import asyncio
@@ -395,5 +414,10 @@ except:
 
 logger.info("Активируем бота")
 # Активируем бота через функцию main
-asyncio.run(main())
+try:
+    asyncio.run(main())
+except Exception as e:
+    logger.error("Ошибка в боте, сообщение ошибки: %s", repr(e) )
+    print(repr(e))
+    sys.exit("Ошибка в боте")
 
